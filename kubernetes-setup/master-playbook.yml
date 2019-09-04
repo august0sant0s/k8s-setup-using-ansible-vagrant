@@ -1,6 +1,11 @@
 ---
 - hosts: all
-  become: true
+  become: yes
+  pre_tasks:
+  - name: Remove join-command
+    local_action: file path=./join-command state=absent
+    sudo: yes
+
   tasks:
   - name: Install packages that allow apt to be used over HTTPS
     apt:
@@ -32,8 +37,8 @@
       update_cache: yes
     vars:
       packages:
-      - docker-ce 
-      - docker-ce-cli 
+      - docker-ce
+      - docker-ce-cli
       - containerd.io
     notify:
       - docker status
@@ -75,12 +80,13 @@
     vars:
       packages:
         - kubelet 
-        - kubeadm 
+        - kubeadm
         - kubectl
 
   - name: Configure node ip
     lineinfile:
       path: /etc/default/kubelet
+      create: yes
       line: KUBELET_EXTRA_ARGS=--node-ip={{ node_ip }}
 
   - name: Restart kubelet
@@ -90,7 +96,7 @@
       state: restarted
 
   - name: Initialize the Kubernetes cluster using kubeadm
-    command: kubeadm init --apiserver-advertise-address="192.168.50.10" --apiserver-cert-extra-sans="192.168.50.10"  --node-name k8s-master --pod-network-cidr=192.168.0.0/16
+    command: kubeadm init --apiserver-advertise-address="172.16.1.10" --pod-network-cidr="192.168.0.0/16"
 
   - name: Setup kubeconfig for vagrant user
     command: "{{ item }}"
@@ -101,7 +107,7 @@
 
   - name: Install calico pod network
     become: false
-    command: kubectl create -f https://docs.projectcalico.org/v3.4/getting-started/kubernetes/installation/hosted/calico.yaml
+    command: kubectl apply -f https://docs.projectcalico.org/v3.8/manifests/calico.yaml
 
   - name: Generate join command
     command: kubeadm token create --print-join-command
@@ -113,4 +119,3 @@
   handlers:
     - name: docker status
       service: name=docker state=started
-

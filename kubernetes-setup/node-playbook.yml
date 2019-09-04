@@ -33,7 +33,7 @@
     vars:
       packages:
       - docker-ce 
-      - docker-ce-cli 
+      - docker-ce-cli
       - containerd.io
     notify:
       - docker status
@@ -75,13 +75,14 @@
     vars:
       packages:
         - kubelet 
-        - kubeadm 
+        - kubeadm
         - kubectl
 
   - name: Configure node ip
     lineinfile:
       path: /etc/default/kubelet
-      line: KUBELET_EXTRA_ARGS=--node-ip={{ node_ip }}
+      create: yes
+      line: KUBELET_EXTRA_ARGS=--node-ip={{ node_ip }} 
 
   - name: Restart kubelet
     service:
@@ -98,3 +99,4 @@
   handlers:
     - name: docker status
       service: name=docker state=started
+
