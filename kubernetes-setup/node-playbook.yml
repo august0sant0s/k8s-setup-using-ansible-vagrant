@@ -2,6 +2,14 @@
 - hosts: all
   become: true
   tasks:
+  - name: Ajust sysctl
+    sysctl:
+      name: net.ipv4.conf.all.rp_filter
+      value: '0'
+      state: present
+      reload: yes
+      sysctl_set: yes
+
   - name: Install packages that allow apt to be used over HTTPS
     apt:
       name: "{{ packages }}"
@@ -22,7 +30,7 @@
 
   - name: Add apt repository for stable version
     apt_repository:
-      repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu xenial stable
+      repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable
       state: present
 
   - name: Install docker and its dependecies
