@@ -1,12 +1,12 @@
 IMAGE_NAME = "bento/ubuntu-20.04"
-N = 1
+N = 2
 
 Vagrant.configure("2") do |config|
     config.ssh.insert_key = false
 
     config.vm.provider "virtualbox" do |v|
-        v.memory = 2048
-        v.cpus = 4
+        v.memory = 4096
+        v.cpus = 2
     end
 
     config.vm.define "k8s-master" do |master|
@@ -18,6 +18,7 @@ Vagrant.configure("2") do |config|
             ansible.ask_become_pass = true
             ansible.extra_vars = {
                 node_ip: "172.16.1.10",
+                k8s_version: "1.18",
             }
         end
     end
@@ -31,6 +32,7 @@ Vagrant.configure("2") do |config|
                 ansible.playbook = "kubernetes-setup/node-playbook.yml"
                 ansible.extra_vars = {
                     node_ip: "172.16.1.#{i + 10}",
+                    k8s_version: "1.18",
                 }
             end
         end

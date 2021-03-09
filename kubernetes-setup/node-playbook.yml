@@ -36,6 +36,7 @@
       url: https://dl.k8s.io/release/stable.txt
       return_content: yes
     register: kubernetes_version
+    when: k8s_version is undefined or k8s_version == ""
 
   - name: Add apt repository for kubic:libcontainers:stable
     blockinfile:
@@ -51,7 +52,7 @@
         deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ version }}/x{{ ansible_facts.distribution }}_{{ ansible_facts.distribution_version }}/ /
       create: yes
     vars:
-      version: "{{ kubernetes_version.content[1:5] }}"
+      version: "{{ kubernetes_version.content[1:5] | default(k8s_version) }}"
 
   - name: Add apt repository for kubic key
     apt_key:
@@ -63,7 +64,7 @@
       url: https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:{{ version }}/x{{ ansible_facts.distribution }}_{{ ansible_facts.distribution_version }}/Release.key
       keyring: /etc/apt/trusted.gpg.d/libcontainers-cri-o.gpg
     vars:
-      version: "{{ kubernetes_version.content[1:5] }}"
+      version: "{{ kubernetes_version.content[1:5] | default(k8s_version) }}"
 
   - name: Install cri-o
     apt:
@@ -115,9 +116,11 @@
 
   - name: Install Kubernetes binaries
     apt:
-      name: ['kubelet', 'kubeadm', 'kubectl']
+      name: ['kubelet={{ version }}.*', 'kubeadm={{ version }}.*', 'kubectl={{ version }}.*']
       state: present
       update_cache: yes
+    vars:
+      version: "{{ kubernetes_version.content[1:5] | default(k8s_version) }}"
 
   - name: Configure node ip
     lineinfile:
