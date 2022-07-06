@@ -1,2 +1,6 @@
 .vagrant/
 kubernetes-setup/join-command
+*.bkp*
+*.bkp
+old
+live

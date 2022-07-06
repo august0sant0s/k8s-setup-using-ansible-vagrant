@@ -1,7 +1,28 @@
 ---
 - hosts: all
-  become: true
+  become: yes
+  pre_tasks:
+  - name: Check if k8s is running
+    wait_for:
+      host: 172.16.1.10
+      port: 6443
+      state: started
+      delay: 0
+      timeout: 10
+    ignore_errors: yes
+    register: result
+
+  - name: Remove join-command
+    local_action: file path=./join-command state=absent
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
   tasks:
+  - name: Install ca-certificates
+    apt:
+      name: ['ca-certificates']
+      update_cache: yes
+      state: latest
+
   - name: Create the .conf file to load the modules at bootup
     blockinfile:
       path: /etc/modules-load.d/crio.conf
@@ -49,7 +70,7 @@
     blockinfile:
       path: /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cri-o:{{ version }}.list
       block: |
-        deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ version }}/x{{ ansible_facts.distribution }}_{{ ansible_facts.distribution_version }}/ /
+        deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/{{ version }}/x{{ ansible_facts.distribution }}_{{ ansible_facts.distribution_version }}/ /
       create: yes
     vars:
       version: "{{ kubernetes_version.content[1:5] | default(k8s_version) }}"
@@ -69,8 +90,8 @@
   - name: Install cri-o
     apt:
       name: ['cri-o', 'cri-o-runc']
-      state: present
       update_cache: yes
+      state: present
 
   - name: Ajust cgroup driver
     blockinfile:
@@ -80,6 +101,7 @@
         conmon_cgroup = "pod"
         cgroup_manager = "cgroupfs"
       create: yes
+    when: skip_cgroupfs == false
 
   - name: systemctl daemon-reload
     systemd: daemon_reload=yes
@@ -126,7 +148,7 @@
     lineinfile:
       path: /etc/default/kubelet
       create: yes
-      line: KUBELET_EXTRA_ARGS=--node-ip={{ node_ip }}
+      line: KUBELET_EXTRA_ARGS=--node-ip={{ ansible_facts.eth1.ipv4.address }}
 
   - name: Restart kubelet
     service:
@@ -134,11 +156,56 @@
       daemon_reload: yes
       state: restarted
 
+# only master
+  - name: Initialize the Kubernetes cluster using kubeadm
+    command: kubeadm init --apiserver-advertise-address="172.16.1.10" --pod-network-cidr="192.168.0.0/16"
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
+  - name: Create .kube directory
+    file:
+      path: /home/vagrant/.kube
+      owner: vagrant
+      group: vagrant
+      state: directory
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
+  - name: Setup kubeconfig for vagrant user
+    file:
+      src: /etc/kubernetes/admin.conf
+      dest: /home/vagrant/.kube/config
+      owner: vagrant
+      group: vagrant
+      state: link
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
+  - name: Install calico pod network
+    become: false
+    command: kubectl apply -f https://docs.projectcalico.org/latest/manifests/calico.yaml
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
+  - name: Generate join command
+    command: kubeadm token create --print-join-command
+    register: join_command
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
+  - name: Copy join command to local file
+    local_action: copy content="{{ join_command.stdout_lines[0] }}" dest="./join-command"
+    when: ansible_facts.hostname == "k8s-master" and result is failed
+
+#
   - name: Copy the join command to server location
     copy: src=join-command dest=/tmp/join-command.sh mode=0777
+    when: ansible_facts.hostname != "k8s-master"
+
+  - name: Verify nodes that already joined
+    command: ls /etc/kubernetes/kubelet.conf 
+    register: result_join
+    ignore_errors: yes
+    when: ansible_facts.hostname != "k8s-master"
 
   - name: Join the node to cluster
     command: sh /tmp/join-command.sh
+    when: ansible_facts.hostname != "k8s-master" and result_join.rc != 0 
 
   handlers:
     - name: docker status

@@ -13,27 +13,27 @@ Vagrant.configure("2") do |config|
         master.vm.box = IMAGE_NAME
         master.vm.network "private_network", ip: "172.16.1.10"
         master.vm.hostname = "k8s-master"
-        master.vm.provision "ansible" do |ansible|
-            ansible.playbook = "kubernetes-setup/master-playbook.yml"
-            ansible.ask_become_pass = true
-            ansible.extra_vars = {
-                node_ip: "172.16.1.10",
-                k8s_version: "1.18",
-            }
-        end
     end
+    config.vm.synced_folder "shared", "/home/vagrant/shared"
 
     (1..N).each do |i|
         config.vm.define "node-#{i}" do |node|
             node.vm.box = IMAGE_NAME
             node.vm.network "private_network", ip: "172.16.1.#{i + 10}"
             node.vm.hostname = "node-#{i}"
-            node.vm.provision "ansible" do |ansible|
-                ansible.playbook = "kubernetes-setup/node-playbook.yml"
-                ansible.extra_vars = {
-                    node_ip: "172.16.1.#{i + 10}",
-                    k8s_version: "1.18",
-                }
+
+            if i == N
+                node.vm.provision "ansible" do |ansible|
+                    ansible.limit = "all"
+                    ansible.ask_become_pass = true
+                    ansible.playbook = "kubernetes-setup/playbook.yml"
+                    ansible.extra_vars = {
+                        k8s_version: "1.21",
+                        skip_cgroupfs: true,
+                    }
+                    #debug
+                    #ansible.verbose = "vvvvvvvv"
+                end
             end
         end
     end
